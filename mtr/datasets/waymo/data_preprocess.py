@@ -132,6 +132,7 @@ def decode_map_features_from_proto(map_features):
 
         else:
             print(cur_data)
+            continue
             raise ValueError
 
         polylines.append(cur_polyline)

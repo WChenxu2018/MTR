@@ -129,9 +129,9 @@ class MTREncoder(nn.Module):
         output = x_stack
         for k in range(len(self.self_attn_layers)):
             output = self.self_attn_layers[k](
-                src=output,
-                pos=pos_embedding,
-                index_pair=index_pair,
+                src=output, #torch.Size([14078, 256])
+                pos=pos_embedding, #torch.Size([14078, 256])
+                index_pair=index_pair, #torch.Size([14078, 16]) 每个query只与附近的16个key进行交互
                 query_batch_cnt=batch_cnt,
                 key_batch_cnt=batch_cnt,
                 index_pair_batch=batch_idxs
@@ -141,7 +141,7 @@ class MTREncoder(nn.Module):
         ret_full_feature[x_mask_stack] = output
 
         ret_full_feature = ret_full_feature.view(batch_size, N, d_model)
-        return ret_full_feature
+        return ret_full_feature #torch.Size([18, 868, 256])
 
     def forward(self, batch_dict):
         """
@@ -150,10 +150,10 @@ class MTREncoder(nn.Module):
               input_dict:
         """
         input_dict = batch_dict['input_dict']
-        obj_trajs, obj_trajs_mask = input_dict['obj_trajs'].cuda(), input_dict['obj_trajs_mask'].cuda() 
+        obj_trajs, obj_trajs_mask = input_dict['obj_trajs'].cuda(), input_dict['obj_trajs_mask'].cuda()  #torch.Size([12, 46, 11, 29]) torch.Size([12, 46, 11]) [CENTERs, OBJECTs, TIMEs, ATTRs]
         map_polylines, map_polylines_mask = input_dict['map_polylines'].cuda(), input_dict['map_polylines_mask'].cuda() 
 
-        obj_trajs_last_pos = input_dict['obj_trajs_last_pos'].cuda() 
+        obj_trajs_last_pos = input_dict['obj_trajs_last_pos'].cuda()  #torch.Size([18, 100, 3])
         map_polylines_center = input_dict['map_polylines_center'].cuda() 
         track_index_to_predict = input_dict['track_index_to_predict']
 
@@ -163,17 +163,17 @@ class MTREncoder(nn.Module):
         num_polylines = map_polylines.shape[1]
 
         # apply polyline encoder
-        obj_trajs_in = torch.cat((obj_trajs, obj_trajs_mask[:, :, :, None].type_as(obj_trajs)), dim=-1)
-        obj_polylines_feature = self.agent_polyline_encoder(obj_trajs_in, obj_trajs_mask)  # (num_center_objects, num_objects, C)
-        map_polylines_feature = self.map_polyline_encoder(map_polylines, map_polylines_mask)  # (num_center_objects, num_polylines, C)
+        obj_trajs_in = torch.cat((obj_trajs, obj_trajs_mask[:, :, :, None].type_as(obj_trajs)), dim=-1) #与mask拼接
+        obj_polylines_feature = self.agent_polyline_encoder(obj_trajs_in, obj_trajs_mask)  # (num_center_objects, num_objects, C) torch.Size([18, 100, 256])
+        map_polylines_feature = self.map_polyline_encoder(map_polylines, map_polylines_mask)  # (num_center_objects, num_polylines, C) torch.Size([18, 768, 256])
 
         # apply self-attn
         obj_valid_mask = (obj_trajs_mask.sum(dim=-1) > 0)  # (num_center_objects, num_objects)
         map_valid_mask = (map_polylines_mask.sum(dim=-1) > 0)  # (num_center_objects, num_polylines)
 
-        global_token_feature = torch.cat((obj_polylines_feature, map_polylines_feature), dim=1) 
-        global_token_mask = torch.cat((obj_valid_mask, map_valid_mask), dim=1) 
-        global_token_pos = torch.cat((obj_trajs_last_pos, map_polylines_center), dim=1) 
+        global_token_feature = torch.cat((obj_polylines_feature, map_polylines_feature), dim=1)  #torch.Size([18, 868, 256])
+        global_token_mask = torch.cat((obj_valid_mask, map_valid_mask), dim=1)  #torch.Size([18, 868])
+        global_token_pos = torch.cat((obj_trajs_last_pos, map_polylines_center), dim=1)  #torch.Size([18, 868, 3])
 
         if self.use_local_attn:
             global_token_feature = self.apply_local_attn(
@@ -192,9 +192,9 @@ class MTREncoder(nn.Module):
         # organize return features
         center_objects_feature = obj_polylines_feature[torch.arange(num_center_objects), track_index_to_predict]
 
-        batch_dict['center_objects_feature'] = center_objects_feature
-        batch_dict['obj_feature'] = obj_polylines_feature
-        batch_dict['map_feature'] = map_polylines_feature
+        batch_dict['center_objects_feature'] = center_objects_feature #torch.Size([18, 256])
+        batch_dict['obj_feature'] = obj_polylines_feature #torch.Size([18, 100, 256])
+        batch_dict['map_feature'] = map_polylines_feature #torch.Size([18, 768, 256])
         batch_dict['obj_mask'] = obj_valid_mask
         batch_dict['map_mask'] = map_valid_mask
         batch_dict['obj_pos'] = obj_trajs_last_pos

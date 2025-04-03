@@ -248,7 +248,7 @@ class WaymoDataset(DatasetTemplate):
                 angle=-center_heading
             ).view(num_center_objects, num_objects, num_timestamps, 2)
 
-        return obj_trajs
+        return obj_trajs #torch.Size([4, 75, 11, 10])
 
     def generate_centered_trajs_for_agents(self, center_objects, obj_trajs_past, obj_types, center_indices, sdc_index, timestamps, obj_trajs_future):
         """[summary]
